@@ -1,0 +1,10 @@
+# Tracker tuned for a heavily-zoomed, angled conveyor where objects move a
+# large fraction of the frame each step. Goal: stop ID switches that cause the
+# same item to be counted twice.
+tracker_type: bytetrack
+track_high_thresh: 0.2   # keep slightly weaker detections in the first match pass
+track_low_thresh: 0.05   # recover near-threshold flicker instead of dropping the track
+new_track_thresh: 0.2    # start tracks EARLY so an id exists before the object reaches the line
+track_buffer: 90         # keep a lost track alive ~3s @30fps so it re-attaches to the same id
+match_thresh: 0.9        # accept lower-IoU matches -> associates across big per-frame jumps
+fuse_score: True

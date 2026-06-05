@@ -1,0 +1,8 @@
+PyQt5>=5.15
+opencv-python>=4.8
+numpy>=1.24
+openpyxl>=3.1
+
+# Optional — only required for the "YOLO11 + ByteTrack" engine.
+# Skip if you only plan to use Motion (MOG2).
+ultralytics>=8.3
