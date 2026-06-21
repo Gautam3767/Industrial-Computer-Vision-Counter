@@ -16,6 +16,13 @@ models/
 *.sqlite
 *.sqlite3
 
+# Exported reports
+*.xlsx
+*.csv
+
+# Local app settings (drawn line geometry, last-used options)
+config.json
+
 # macOS
 .DS_Store
 

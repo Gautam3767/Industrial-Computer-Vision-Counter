@@ -1,0 +1,8 @@
+# Headless REST/WebSocket service (Roadmap Phase 9). Install with:
+#   pip install -r requirements-api.txt
+# Pulls in the core + optional YOLO deps too, since the service can run either engine.
+-r requirements.txt
+
+fastapi==0.128.8
+uvicorn[standard]==0.39.0
+pydantic==2.13.4

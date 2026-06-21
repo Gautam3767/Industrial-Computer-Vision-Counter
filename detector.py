@@ -1,6 +1,7 @@
+from collections import OrderedDict
+
 import cv2
 import numpy as np
-from collections import OrderedDict
 
 from counting_line import LineCrossingCounter
 
@@ -85,14 +86,30 @@ class ObjectCounter:
         self.line_position = 0.5
         self.orientation = "horizontal"
         self.direction = "both"
+        # Optional mouse-drawn line as two normalized (0-1) endpoints. When set,
+        # it overrides orientation/position and is treated as an arbitrary segment.
+        self.custom_line = None
         self.min_area = 1500
 
+        # MOG2 always runs on CPU; surfaced for the on-frame performance overlay.
+        self.device = "cpu"
         self.on_count = None
         self._warmup_frames = 0
+        # Cached detection state so skipped (coasted) frames can still render.
+        self._last_boxes = []
+        self._last_tracked = {}
 
     @property
     def total_count(self):
         return self.line_crosser.total
+
+    @property
+    def class_counts(self):
+        return self.line_crosser.class_counts
+
+    @property
+    def overlay_label(self):
+        return f"{self.name} · {self.device.upper()}"
 
     @staticmethod
     def _make_subtractor():
@@ -105,6 +122,8 @@ class ObjectCounter:
         self.tracker = CentroidTracker()
         self.line_crosser.reset()
         self._warmup_frames = 0
+        self._last_boxes = []
+        self._last_tracked = {}
 
     def _mask(self, frame):
         blurred = cv2.GaussianBlur(frame, (5, 5), 0)
@@ -129,37 +148,56 @@ class ObjectCounter:
             boxes.append((x, y, w, h))
         return centroids, boxes
 
-    def process(self, frame):
-        h, w = frame.shape[:2]
-
+    def _resolve_line(self, w, h):
+        """Return (p1, p2, line_coord, axis_index). For a custom (arbitrary-angle)
+        line, line_coord/axis_index are None and segment crossing is used."""
+        if self.custom_line is not None:
+            (nx1, ny1), (nx2, ny2) = self.custom_line
+            return ((int(nx1 * w), int(ny1 * h)),
+                    (int(nx2 * w), int(ny2 * h)), None, None)
         if self.orientation == "horizontal":
-            line_coord, axis_index = int(h * self.line_position), 1
-            p1, p2 = (0, line_coord), (w, line_coord)
-        else:
-            line_coord, axis_index = int(w * self.line_position), 0
-            p1, p2 = (line_coord, 0), (line_coord, h)
+            line_coord = int(h * self.line_position)
+            return (0, line_coord), (w, line_coord), line_coord, 1
+        line_coord = int(w * self.line_position)
+        return (line_coord, 0), (line_coord, h), line_coord, 0
 
-        mask = self._mask(frame)
+    def process(self, frame, run_inference=True):
+        h, w = frame.shape[:2]
+        p1, p2, line_coord, axis_index = self._resolve_line(w, h)
 
-        self._warmup_frames += 1
-        if self._warmup_frames < 15:
-            centroids, boxes = [], []
-        else:
-            centroids, boxes = self._detections(mask)
+        counted = []
+        if run_inference:
+            mask = self._mask(frame)
+            self._warmup_frames += 1
+            if self._warmup_frames < 15:
+                centroids, boxes = [], []
+            else:
+                centroids, boxes = self._detections(mask)
 
-        tracked = self.tracker.update(centroids)
+            tracked = self.tracker.update(centroids)
 
-        counted_now = self.line_crosser.update(
-            tracked, line_coord, axis_index, self.direction, self.on_count
-        )
+            if axis_index is None:
+                counted = self.line_crosser.update_segment(
+                    tracked, p1, p2, self.direction
+                )
+            else:
+                counted = self.line_crosser.update(
+                    tracked, line_coord, axis_index, self.direction
+                )
 
+            self._last_boxes = boxes
+            self._last_tracked = dict(tracked)
+
+        return self._render(frame, p1, p2), counted
+
+    def _render(self, frame, p1, p2):
         overlay = frame.copy()
         cv2.line(overlay, p1, p2, (0, 220, 255), 2, cv2.LINE_AA)
 
-        for (x, y, bw, bh) in boxes:
+        for (x, y, bw, bh) in self._last_boxes:
             cv2.rectangle(overlay, (x, y), (x + bw, y + bh), (80, 220, 120), 2)
 
-        for obj_id, centroid in tracked.items():
+        for obj_id, centroid in self._last_tracked.items():
             color = (60, 120, 255) if obj_id in self.line_crosser.counted else (255, 160, 60)
             cx, cy = int(centroid[0]), int(centroid[1])
             cv2.circle(overlay, (cx, cy), 5, color, -1)
@@ -169,7 +207,7 @@ class ObjectCounter:
             )
 
         self._draw_count_badge(overlay)
-        return overlay, counted_now
+        return overlay
 
     def _draw_count_badge(self, img):
         text = f"Count: {self.total_count}"

@@ -1,8 +1,10 @@
-PyQt5>=5.15
-opencv-python>=4.8
-numpy>=1.24
-openpyxl>=3.1
+# Core runtime — pinned to known-good versions (see README for Python 3.9+).
+PyQt5==5.15.14
+opencv-python==4.13.0
+numpy==2.0.2
+openpyxl==3.1.5
+pyqtgraph==0.13.7   # live throughput + history charts (degrades gracefully if absent)
 
 # Optional — only required for the "YOLO11 + ByteTrack" engine.
-# Skip if you only plan to use Motion (MOG2).
-ultralytics>=8.3
+# Skip if you only plan to use Motion (MOG2). Pulls in torch (~large).
+ultralytics==8.4.38
